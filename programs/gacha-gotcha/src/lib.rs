@@ -28,4 +28,8 @@ pub mod gacha_gotcha {
     pub fn open_pack(ctx: Context<OpenPack>) -> Result<()> {
         ctx.accounts.open_pack(ctx.program_id)
     }
+
+    pub fn list(ctx: Context<List>, min_bid: u64, duration: i64) -> Result<()> {
+        ctx.accounts.list(min_bid, duration, ctx.bumps.auction)
+    }
 }

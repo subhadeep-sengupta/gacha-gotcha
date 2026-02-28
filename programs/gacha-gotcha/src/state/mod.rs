@@ -47,3 +47,16 @@ pub enum PackStatus {
     Committed,
     Opened,
 }
+
+#[account]
+#[derive(InitSpace)]
+pub struct Auction {
+    pub seller: Pubkey,
+    pub nft: Pubkey,
+    pub highest_bidder: Pubkey,
+    pub highest_bid: u64,
+    pub minimum_bid: u64,
+    pub end_time: i64,
+    pub bump: u8,
+    pub active: u8,
+}

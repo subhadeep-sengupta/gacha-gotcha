@@ -21,3 +21,15 @@ pub enum GachaError {
     #[msg("Randomness not ready")]
     RandomnessNotReady,
 }
+
+#[error_code]
+pub enum AuctionError {
+    #[msg("Auction already active")]
+    AlreadyActive,
+    #[msg("Auction ended")]
+    Ended,
+    #[msg("Bid too low")]
+    BidTooLow,
+    #[msg("Unauthorized")]
+    Unauthorized,
+}
