@@ -94,7 +94,7 @@ describe("gacha-pack", () => {
     return asset;  // so tests can use it
   }
 
-  it("lists an MPL Core asset for auction", async () => {
+  it("lists an MPL Core asset, bids and settlement for auction", async () => {
     // 1. Mint Core NFT
     const asset = await createNft();
 
@@ -137,7 +137,7 @@ describe("gacha-pack", () => {
       anchor.web3.SystemProgram.transfer({
         fromPubkey: owner.publicKey,
         toPubkey: bidder.publicKey,
-        lamports: 2 * anchor.web3.LAMPORTS_PER_SOL,
+        lamports: 1 * anchor.web3.LAMPORTS_PER_SOL,
       })
     );
     await provider.sendAndConfirm(fundTx, [owner]);
@@ -181,6 +181,58 @@ describe("gacha-pack", () => {
       .rpc()
 
     console.log(`Settle: ${settleTx.toString()}`)
+  });
+
+
+  it("lists an MPL Core asset and cancel from the auction", async () => {
+    // 1. Mint Core NFT
+    const asset = await createNft();
+
+    const assetPubkey = new PublicKey(asset.publicKey.toString())
+    const owner = Keypair.fromSecretKey(new Uint8Array(wallet))
+    // 2. Derive auction PDA
+    const [auctionPda] = anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("auction"), assetPubkey.toBuffer()],
+      program.programId
+    );
+
+    // 3. Call list instruction
+    const minBid = new anchor.BN(0.1 * anchor.web3.LAMPORTS_PER_SOL);
+    const duration = new anchor.BN(0); // 0 seconds
+
+    await program.methods
+      .list(minBid, duration)
+      .accountsStrict({
+        seller: owner.publicKey,
+        asset: assetPubkey,
+        auction: auctionPda,
+        systemProgram: anchor.web3.SystemProgram.programId,
+        coreProgram: MPL_CORE_PROGRAM_ID,   // from mpl-core
+      })
+      .signers([owner])                 // seller signs
+      .rpc();
+
+    // 4. Fetch and assert auction state
+    const auction = await program.account.auction.fetch(auctionPda);
+
+    expect(auction.seller.toBase58()).to.equal(owner.publicKey.toBase58());
+    expect(auction.nft.toBase58()).to.equal(assetPubkey.toBase58());
+    expect(auction.minimumBid.eq(minBid)).to.be.true;
+    expect(auction.active).to.equal(1);
+
+
+    const cancelTx = await program.methods.cancel()
+      .accountsStrict({
+        seller: owner.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId,
+        coreProgram: MPL_CORE_PROGRAM_ID,
+        auction: auctionPda,
+        asset: assetPubkey
+      })
+      .signers([owner])
+      .rpc()
+
+    console.log(`Settle: ${cancelTx.toString()}`)
   });
 
 });

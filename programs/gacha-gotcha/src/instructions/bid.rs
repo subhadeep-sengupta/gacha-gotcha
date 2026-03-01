@@ -53,25 +53,13 @@ impl<'info> Bid<'info> {
                 AuctionError::Unauthorized
             );
 
-            // Use as_ref(), not to_bytes(), so we don't take a ref to a temporary
-            let signer_seeds: &[&[&[u8]]] = &[&[
-                b"auction",
-                &self.asset.key().to_bytes(),
-                &[self.auction.bump],
-            ]];
+            let refund = self.auction.highest_bid;
 
-            let auction_to_prev = Transfer {
-                from: self.auction.to_account_info(),
-                to: self.previous_highest_bidder.to_account_info(),
-            };
-
-            let cpi_ctx_apb = CpiContext::new_with_signer(
-                self.system_program.to_account_info(),
-                auction_to_prev,
-                signer_seeds,
-            );
-
-            transfer(cpi_ctx_apb, self.auction.highest_bid)?;
+            **self.auction.to_account_info().try_borrow_mut_lamports()? -= refund;
+            **self
+                .previous_highest_bidder
+                .to_account_info()
+                .try_borrow_mut_lamports()? += refund;
         }
 
         // 4. Update state for both branches

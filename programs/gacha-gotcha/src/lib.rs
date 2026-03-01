@@ -40,4 +40,8 @@ pub mod gacha_gotcha {
     pub fn settle(ctx: Context<Settle>) -> Result<()> {
         ctx.accounts.settle()
     }
+
+    pub fn cancel(ctx: Context<Cancel>) -> Result<()> {
+        ctx.accounts.cancel()
+    }
 }
