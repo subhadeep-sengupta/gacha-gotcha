@@ -32,4 +32,8 @@ pub mod gacha_gotcha {
     pub fn list(ctx: Context<List>, min_bid: u64, duration: i64) -> Result<()> {
         ctx.accounts.list(min_bid, duration, ctx.bumps.auction)
     }
+
+    pub fn bid(ctx: Context<Bid>, bid: u64) -> Result<()> {
+        ctx.accounts.bid(bid)
+    }
 }

@@ -6,6 +6,10 @@
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
+    "@metaplex-foundation/mpl-core": "^1.7.0",
+    "@metaplex-foundation/umi": "^1.5.1",
+    "@metaplex-foundation/umi-bundle-defaults": "^1.5.1",
+    "@metaplex-foundation/umi-uploader-irys": "^1.5.0",
     "@solana/web3.js": "^1.98.4",
     "@switchboard-xyz/on-demand": "^3.9.0",
     "@switchboard-xyz/solana-randomness-service": "^1.0.0",

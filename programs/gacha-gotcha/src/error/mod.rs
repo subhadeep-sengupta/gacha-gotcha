@@ -26,6 +26,8 @@ pub enum GachaError {
 pub enum AuctionError {
     #[msg("Auction already active")]
     AlreadyActive,
+    #[msg("Auction is not active")]
+    AuctionNotActive,
     #[msg("Auction ended")]
     Ended,
     #[msg("Bid too low")]

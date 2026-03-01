@@ -1,195 +1,170 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { GachaGotcha } from "../target/types/gacha_gotcha";
+import { create, mplCore } from '@metaplex-foundation/mpl-core'
+import {
+  createGenericFile,
+  generateSigner,
+  keypairIdentity,
+} from '@metaplex-foundation/umi'
+import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
+import { irysUploader } from '@metaplex-foundation/umi-uploader-irys'
+import { base58 } from '@metaplex-foundation/umi/serializers'
+import fs from 'fs';
+import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 import { expect } from "chai";
-import * as sb from "@switchboard-xyz/on-demand";
-import { Keypair } from "@solana/web3.js";
-import { RandomnessService } from "@switchboard-xyz/solana-randomness-service";
+import { Keypair, PublicKey } from "@solana/web3.js";
+import wallet from "../../../phantom-wallet/wallet-1/id.json"
 
 describe("gacha-pack", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
   const program = anchor.workspace.GachaGotcha as Program<GachaGotcha>;
 
-  before(async () => {
-
-    const { keypair, connection, program } = await sb.AnchorUtils.loadEnv();
-
-    const queue = await sb.getDefaultQueue(connection.rpcEndpoint);
-
-    const sbProgramId = await sb.getProgramId(provider.connection);
-    const sbIdl = await anchor.Program.fetchIdl(sbProgramId, provider);
-    const sbProgram = new anchor.Program(sbIdl!, provider);
-  })
-
-  it("Creates pack config", async () => {
-    const [pack] = anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("pack")],
-      program.programId
+  const createNft = async () => {
+    const umi = createUmi('https://api.devnet.solana.com')
+      .use(mplCore())
+      .use(
+        irysUploader({
+          // mainnet address: "https://node1.irys.xyz"
+          // devnet address: "https://devnet.irys.xyz"
+          address: 'https://devnet.irys.xyz',
+        })
+      )
+    // Generate a new keypair signer.
+    const keypair = umi.eddsa.createKeypairFromSecretKey(
+      new Uint8Array(wallet)
     );
-    const [rarity] = anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("rarity"), pack.toBuffer()],
-      program.programId
-    );
+    umi.use(keypairIdentity(keypair));
 
-    await program.methods
-      .createPack()
-      .accountsStrict({
-        pack,
-        rarity,
-        admin: provider.wallet.publicKey,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      })
-      .rpc();  // ← No signers needed!
+    const imageFile = fs.readFileSync("./image.jpg");
 
-    const packAccount = await program.account.packConfig.fetch(pack);
-    console.log("Pack:", packAccount);
-    expect(packAccount.packSize).to.equal(5);
-  });
-
-  it("User buys a pack", async () => {
-    const buyer = anchor.web3.Keypair.generate();
-    await provider.connection.requestAirdrop(buyer.publicKey, 2e9);
-    await new Promise(r => setTimeout(r, 2000));
-
-    const [pack] = anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("pack")],
-      program.programId
-    );
-    const [userPack] = anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("userpack"), pack.toBuffer(), buyer.publicKey.toBuffer()],
-      program.programId
-    );
-
-    await program.methods
-      .buyPack()
-      .accountsStrict({
-        pack,
-        userPack,
-        treasury: provider.wallet.publicKey,  // Admin wallet
-        buyer: buyer.publicKey,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      })
-      .signers([buyer])
-      .rpc();
-
-    const fetchedPack = await program.account.packConfig.fetch(pack);
-    expect(fetchedPack.soldCount).to.equal(1);
-  });
-
-
-  it("Full pack flow: buy → commit → open", async () => {
-
-    const { keypair, connection, program } = await sb.AnchorUtils.loadEnv();
-
-    const queue = await sb.getDefaultQueue(connection.rpcEndpoint);
-
-    const sbProgramId = await sb.getProgramId(provider.connection);
-    const sbIdl = await anchor.Program.fetchIdl(sbProgramId, provider);
-    const sbProgram = new anchor.Program(sbIdl!, provider);
-    // Generate keypair for randomness account
-    const rngKp = Keypair.generate();
-
-    // Create the randomness account
-    const [randomness, createIx] = await sb.Randomness.create(sbProgram, rngKp, queue);
-
-    // Send creation transaction
-    const createTx = await sb.asV0Tx({
-      connection,
-      ixs: [createIx],
-      payer: keypair.publicKey,
-      signers: [keypair, rngKp],
-      computeUnitPrice: 75_000,
-      computeUnitLimitMultiple: 1.3,
+    const umiImageFile = createGenericFile(imageFile, 'image.jpg', {
+      tags: [{ name: 'Content-Type', value: 'image/jpg' }],
     });
 
-    await connection.sendTransaction(createTx);
+    console.log('Uploading Image...');
+    const imageUri = await umi.uploader.upload([umiImageFile]).catch((err) => {
+      throw new Error(err)
+    })
+    console.log('imageUri: ' + imageUri[0])
+    //
+    // ** Upload Metadata to Arweave **
+    //
+    const metadata = {
+      name: 'CAT NFT',
+      description: 'This is an CAT NFT',
+      image: imageUri[0],
+      external_url: 'https://example.com',
+      attributes: [
+        { trait_type: "rarity", value: "Epic" },
+      ],
+      properties: {
+        files: [
+          {
+            uri: imageUri[0],
+            type: 'image/jpeg',
+          },
+        ],
+        category: 'image',
+      },
+    };
 
-    const requestKeypair = anchor.web3.Keypair.generate();
-    const [packPda] = anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("pack")],
+    console.log('Uploading Metadata...')
+    const metadataUri = await umi.uploader.uploadJson(metadata).catch((err) => {
+      throw new Error(err)
+    });
+    const asset = generateSigner(umi)
+    console.log('Creating NFT...')
+    const tx = await create(umi, {
+      asset,
+      name: 'My NFT',
+      uri: metadataUri,
+    }).sendAndConfirm(umi)
+    // Finally we can deserialize the signature that we can check on chain.
+    const signature = base58.deserialize(tx.signature)[0]
+    // Log out the signature and the links to the transaction and the NFT.
+    console.log('\nNFT Created');
+    console.log('View Transaction on Solana Explorer');
+    console.log(`https://explorer.solana.com/tx/${signature}?cluster=devnet`);
+    console.log('\n');
+    console.log('View NFT on Metaplex Explorer');
+    console.log(`https://core.metaplex.com/explorer/${asset.publicKey}?cluster=devnet`);
+
+    return asset;  // so tests can use it
+  }
+
+  it("lists an MPL Core asset for auction", async () => {
+    // 1. Mint Core NFT
+    const asset = await createNft();
+
+    const assetPubkey = new PublicKey(asset.publicKey.toString())
+    const owner = Keypair.fromSecretKey(new Uint8Array(wallet))
+    // 2. Derive auction PDA
+    const [auctionPda] = anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("auction"), assetPubkey.toBuffer()],
       program.programId
     );
-    const [rarityPda] = anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("rarity"), packPda.toBuffer()],
-      program.programId
-    );
 
-    const buyer = anchor.web3.Keypair.generate();
-    await provider.connection.requestAirdrop(buyer.publicKey, 2e9);
-    await new Promise(r => setTimeout(r, 2000));
-
-    // 1. BUY PACK FIRST (creates user_pack)
-    const [userPack] = anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("userpack"), packPda.toBuffer(), buyer.publicKey.toBuffer()],
-      program.programId
-    );
-
-    const txSig = await program.methods
-      .commitOpen()  // Your instruction that CPI's to randomness service
-      .accountsStrict({
-        buyer: buyer.publicKey
-        pack: packPda,
-        randomness: 
-  })
-      .signers([requestKeypair])
-      .rpc();
+    // 3. Call list instruction
+    const minBid = new anchor.BN(0.1 * anchor.web3.LAMPORTS_PER_SOL);
+    const duration = new anchor.BN(60); // 60 seconds
 
     await program.methods
-      .buyPack()
+      .list(minBid, duration)
       .accountsStrict({
-        pack: packPda,
-        userPack,
-        treasury: provider.wallet.publicKey,
-        buyer: buyer.publicKey,
+        seller: owner.publicKey,
+        asset: assetPubkey,
+        auction: auctionPda,
         systemProgram: anchor.web3.SystemProgram.programId,
+        coreProgram: MPL_CORE_PROGRAM_ID,   // from mpl-core
       })
-      .signers([buyer])
+      .signers([owner])                 // seller signs
       .rpc();
 
-    // 2. COMMIT
+    // 4. Fetch and assert auction state
+    const auction = await program.account.auction.fetch(auctionPda);
+
+    expect(auction.seller.toBase58()).to.equal(owner.publicKey.toBase58());
+    expect(auction.nft.toBase58()).to.equal(assetPubkey.toBase58());
+    expect(auction.minimumBid.eq(minBid)).to.be.true;
+    expect(auction.active).to.equal(1);
+
+
+    const bidder = anchor.web3.Keypair.generate();
+
+    const fundTx = new anchor.web3.Transaction().add(
+      anchor.web3.SystemProgram.transfer({
+        fromPubkey: owner.publicKey,
+        toPubkey: bidder.publicKey,
+        lamports: 2 * anchor.web3.LAMPORTS_PER_SOL,
+      })
+    );
+    await provider.sendAndConfirm(fundTx, [owner]);
+
+    const previousHighestBidder = Keypair.generate();
+
+    // 3. Call list instruction
+    const bid = new anchor.BN(0.5 * anchor.web3.LAMPORTS_PER_SOL);
+
     await program.methods
-      .commitOpen()
+      .bid(bid)
       .accountsStrict({
-        buyer: buyer.publicKey,
-        pack: packPda,
-        userPack,
-        randomness: anchor.web3.Keypair.generate().publicKey, // dummy
+        bidder: bidder.publicKey,
+        previousHighestBidder: previousHighestBidder.publicKey,
+        asset: assetPubkey,
+        auction: auctionPda,
+        systemProgram: anchor.web3.SystemProgram.programId,
+        coreProgram: MPL_CORE_PROGRAM_ID,   // from mpl-core
       })
-      .signers([buyer])
+      .signers([bidder])                 // seller signs
       .rpc();
 
-    let fetched = await program.account.userPack.fetch(userPack);
-    expect(fetched.status).to.deep.equal({ committed: {} });
+    // 4. Fetch and assert auction state
 
+    expect(auction.seller.toBase58()).to.equal(owner.publicKey.toBase58());
+    expect(auction.nft.toBase58()).to.equal(assetPubkey.toBase58());
+    expect(auction.active).to.equal(1);
   });
+
 });
-
-export async function loadSbProgram(
-  provider: anchor.Provider
-): Promise<anchor.Program> {
-  const sbProgramId = await sb.getProgramId(provider.connection);
-  const sbIdl = await anchor.Program.fetchIdl(sbProgramId, provider);
-  const sbProgram = new anchor.Program(sbIdl!, provider);
-  return sbProgram;
-}
-
-
-
-export async function myAnchorProgram(
-  provider: anchor.Provider,
-  keypath: string
-): Promise<anchor.Program> {
-  const myProgramKeypair = await sb.AnchorUtils.initKeypairFromFile(keypath);
-  const pid = myProgramKeypair.publicKey;
-  const idl = (await anchor.Program.fetchIdl(pid, provider))!;
-  if (idl == null) {
-    console.error("IDL not found for the program at", pid.toString());
-    process.exit(1);
-  }
-  if (idl?.address == undefined || idl?.address == null) {
-    idl.address = pid.toString();
-  }
-  const program = new anchor.Program(idl, provider);
-  return program;
-}
