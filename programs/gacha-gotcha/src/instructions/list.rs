@@ -1,15 +1,13 @@
-use anchor_lang::prelude::*;
 use crate::state::Auction;
-use mpl_core::{ID as CORE_PROGRAM_ID, instructions::TransferV1CpiBuilder};
+use anchor_lang::prelude::*;
+use mpl_core::{instructions::TransferV1CpiBuilder, ID as CORE_PROGRAM_ID};
 
 #[derive(Accounts)]
 pub struct List<'info> {
     #[account(mut)]
     pub seller: Signer<'info>,
 
-    #[account(
-        mut,
-    )]
+    #[account(mut)]
     /// CHECK: type & ownership checked by Core CPI later
     pub asset: UncheckedAccount<'info>,
 
@@ -22,7 +20,7 @@ pub struct List<'info> {
     )]
     pub auction: Account<'info, Auction>,
 
-    pub system_program: Program<'info, System>, 
+    pub system_program: Program<'info, System>,
     #[account(address = CORE_PROGRAM_ID)]
     /// CHECK: checked by core
     pub core_program: UncheckedAccount<'info>,
@@ -39,8 +37,8 @@ impl<'info> List<'info> {
             highest_bid: 0,
             minimum_bid: min_bid,
             end_time: clock + duration,
-            bump ,
-            active: 1, 
+            bump,
+            active: 1,
         });
 
         TransferV1CpiBuilder::new(&self.core_program.to_account_info())
@@ -51,6 +49,11 @@ impl<'info> List<'info> {
             .payer(&self.seller.to_account_info())
             .invoke()?;
 
+        msg!(
+            "NFT {} is live on the marketplace with min bid {} lamports",
+            self.asset.key(),
+            min_bid
+        );
         Ok(())
     }
 }

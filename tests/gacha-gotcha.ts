@@ -108,7 +108,7 @@ describe("gacha-pack", () => {
 
     // 3. Call list instruction
     const minBid = new anchor.BN(0.1 * anchor.web3.LAMPORTS_PER_SOL);
-    const duration = new anchor.BN(60); // 60 seconds
+    const duration = new anchor.BN(0); // 0 seconds
 
     await program.methods
       .list(minBid, duration)
@@ -165,6 +165,22 @@ describe("gacha-pack", () => {
     expect(auction.seller.toBase58()).to.equal(owner.publicKey.toBase58());
     expect(auction.nft.toBase58()).to.equal(assetPubkey.toBase58());
     expect(auction.active).to.equal(1);
+
+
+
+    const settleTx = await program.methods.settle()
+      .accountsStrict({
+        seller: owner.publicKey,
+        winner: bidder.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId,
+        coreProgram: MPL_CORE_PROGRAM_ID,
+        auction: auctionPda,
+        asset: assetPubkey
+      })
+      .signers([owner])
+      .rpc()
+
+    console.log(`Settle: ${settleTx.toString()}`)
   });
 
 });

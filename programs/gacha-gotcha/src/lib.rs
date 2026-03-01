@@ -36,4 +36,8 @@ pub mod gacha_gotcha {
     pub fn bid(ctx: Context<Bid>, bid: u64) -> Result<()> {
         ctx.accounts.bid(bid)
     }
+
+    pub fn settle(ctx: Context<Settle>) -> Result<()> {
+        ctx.accounts.settle()
+    }
 }

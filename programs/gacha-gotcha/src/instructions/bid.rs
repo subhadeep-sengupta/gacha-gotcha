@@ -33,10 +33,7 @@ pub struct Bid<'info> {
 
 impl<'info> Bid<'info> {
     pub fn bid(&mut self, bid: u64) -> Result<()> {
-        let clock = Clock::get()?.unix_timestamp;
-
         require!(self.auction.active == 1, AuctionError::AuctionNotActive);
-        require!(clock < self.auction.end_time, AuctionError::Ended);
         require!(bid >= self.auction.minimum_bid, AuctionError::BidTooLow);
         require!(bid > self.auction.highest_bid, AuctionError::BidTooLow);
 
