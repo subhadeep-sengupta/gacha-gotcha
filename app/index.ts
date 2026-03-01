@@ -97,7 +97,7 @@ async function main() {
     [Buffer.from("rarity"), packPda.toBuffer()],
     gachaProgram.programId
   );
-  console.log("ℹ️ Using existing pack PDA:", packPda.toString());
+  console.log("pack PDA:", packPda.toString());
 
   // 5. Buyer = your main wallet
   const buyer = Keypair.generate();
